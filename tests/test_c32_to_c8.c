@@ -1,44 +1,23 @@
 #include "../src/conv_basic.h"
 
-#include <assert.h>
+#include "test_common.h"
 #include <stdio.h>
 #include <string.h>
 
-typedef struct
-{
-    size_t sz_input;
-    const char32_t *input;
-    size_t sz_expected;
-    const char8_t *expected;
-} test_pair_t;
-
-#define ADD_TEST_PAIR(str)                                                                                             \
-    (test_pair_t)                                                                                                      \
-    {                                                                                                                  \
-        .sz_input = sizeof(U## #str) / sizeof(char32_t) - 1, .input = U## #str,                                        \
-        .sz_expected = (sizeof(u8## #str) / sizeof(char8_t)) - 1, .expected = u8## #str                                \
-    }
-
 int main(void)
 {
-    constexpr test_pair_t test_pairs[] = {
-        ADD_TEST_PAIR(hello),        ADD_TEST_PAIR(world),  ADD_TEST_PAIR(ケツを食べる),
-        ADD_TEST_PAIR(uoooh 😭😭😭), ADD_TEST_PAIR(🇧🇷🇧🇷🇧🇷),
-    };
-    constexpr size_t num_test_pairs = sizeof(test_pairs) / sizeof(test_pair_t);
-
     // Check the conversion is correct
     char8_t out[1024] = {0};
     for (unsigned i = 0; i < num_test_pairs; ++i)
     {
         size_t consumed, written;
         cutf_state_t ctx = {0};
-        auto const res = cutf_s32tos8(test_pairs[i].sz_input, test_pairs[i].input, sizeof(out) / sizeof(*out),
+        auto const res = cutf_s32tos8(test_pairs[i].sz32, test_pairs[i].p32, sizeof(out) / sizeof(*out),
                                       &consumed, out, &written, &ctx);
-        assert(res == CUTF_SUCCESS);
-        assert(consumed == test_pairs[i].sz_input);
-        assert(written == test_pairs[i].sz_expected);
-        assert(memcmp(out, test_pairs[i].expected, test_pairs[i].sz_expected * sizeof(char8_t)) == 0);
+        TEST_ASSERT(res == CUTF_SUCCESS);
+        TEST_ASSERT(consumed == test_pairs[i].sz32);
+        TEST_ASSERT(written == test_pairs[i].sz8);
+        TEST_ASSERT(memcmp(out, test_pairs[i].p8, test_pairs[i].sz8 * sizeof(char8_t)) == 0);
     }
 
     // Check that conversion works even bit by bit
@@ -53,10 +32,10 @@ int main(void)
             char8_t c;
             auto const res = cutf_s32tos8(1, full_input + j, 1, &consumed, &c, &written, &state);
             j += consumed;
-            assert((i + 2 == sizeof(full_expected) && res == CUTF_SUCCESS) || (res == CUTF_INSUFFICIENT_BUFFER));
-            assert(consumed < 2);
-            assert(written == 1);
-            assert(c == full_expected[i]);
+            TEST_ASSERT((i + 2 == sizeof(full_expected) && res == CUTF_SUCCESS) || (res == CUTF_INSUFFICIENT_BUFFER));
+            TEST_ASSERT(consumed < 2);
+            TEST_ASSERT(written == 1);
+            TEST_ASSERT(c == full_expected[i]);
         }
     }
 
