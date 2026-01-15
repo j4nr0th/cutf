@@ -637,10 +637,10 @@ cutf_result_t cutf_s32tos16(const size_t sz_in, const char32_t p_in[const static
 
 typedef enum
 {
-    BOM_UTF16_BE = 0xFEFF,
-    BOM_UTF16_LE = 0xFFFE,
-    BOM_UTF32_BE = 0x0000FEFF,
-    BOM_UTF32_LE = 0xFFFE0000,
+    BOM_UTF16_NATIVE = 0xFEFF,
+    BOM_UTF16_REVERSE = 0xFFFE,
+    BOM_UTF32_NATIVE = 0x0000FEFF,
+    BOM_UTF32_REVERSE = 0xFFFE0000,
 } endianness_bom_values;
 
 utf_endianness_t cutf_utf16_bom_endianness(const char16_t bom)
@@ -663,9 +663,9 @@ char16_t cutf_utf16_bom(const utf_endianness_t endianness)
     switch (endianness)
     {
     case CUTF_ENDIANNESS_NATIVE:
-        return BOM_UTF16_BE;
+        return BOM_UTF16_NATIVE;
     case CUTF_ENDIANNESS_REVERSE:
-        return BOM_UTF16_LE;
+        return BOM_UTF16_REVERSE;
     default:
         return 0;
     }
@@ -693,8 +693,22 @@ void cutf_utf16_swap_endianness(const size_t sz_out, char16_t p_out[const sz_out
     }
 }
 
-typedef union
+utf_endianness_t cutf_utf32_bom_endianness(const char32_t bom)
 {
+    switch (bom)
+    {
+    case BOM_UTF32_NATIVE:
+        return CUTF_ENDIANNESS_NATIVE;
+
+    case BOM_UTF32_REVERSE:
+        return CUTF_ENDIANNESS_REVERSE;
+
+    default:
+        return CUTF_ENDIANNESS_INVALID;
+    }
+}
+
+typedef union {
     char32_t c32;
     struct
     {
@@ -702,7 +716,8 @@ typedef union
     };
 } swap_endian_32_t;
 
-void cutf_utf32_swap_endianness(const size_t sz_out, char32_t p_out[const sz_out], const char32_t p_in[const static sz_out])
+void cutf_utf32_swap_endianness(const size_t sz_out, char32_t p_out[const sz_out],
+                                const char32_t p_in[const static sz_out])
 {
     for (size_t i = 0; i < sz_out; ++i)
     {

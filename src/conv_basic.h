@@ -191,6 +191,14 @@ char16_t cutf_utf16_bom(utf_endianness_t endianness);
 void cutf_utf16_swap_endianness(size_t sz_out, char16_t p_out[sz_out], const char16_t p_in[static sz_out]);
 
 /**
+ * Determine the endianness of a UTF-32 string based on a byte-order mark (BOM).
+ *
+ * @param bom Byte-order mark (BOM) codepoint U+FEFF encoded.
+ * @return Indicator of UTF-32 endianness and zero if the passed value was not BOM.
+ */
+utf_endianness_t cutf_utf32_bom_endianness(char32_t bom);
+
+/**
  * Reverse the endianness of UTF-32 units in the array. Input and output may overlap.
  *
  * @param sz_out Number of UTF-32 units to reverse the endianness of.
