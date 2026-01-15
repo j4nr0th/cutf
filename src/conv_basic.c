@@ -187,7 +187,7 @@ cutf_result_t cutf_s8tos32(const size_t sz_in, const char8_t p_in[const static s
     *p_written = pos_out;
 
     // Check if we ran out of output buffer before the end of the input
-    if (pos_out == sz_out)
+    if (pos_in != sz_in)
         return CUTF_INSUFFICIENT_BUFFER;
 
     // Nope, we finished it all!
@@ -287,7 +287,6 @@ cutf_result_t cutf_s32tos8(const size_t sz_in, const char32_t p_in[const static 
                            size_t *const p_consumed, char8_t p_out[const sz_out], size_t *const p_written,
                            cutf_state_t *const state)
 {
-    cutf_result_t ret = CUTF_INSUFFICIENT_BUFFER;
     size_t pos_out, pos_in;
     for (pos_out = 0, pos_in = 0; pos_out < sz_out; ++pos_out)
     {
@@ -303,7 +302,6 @@ cutf_result_t cutf_s32tos8(const size_t sz_in, const char32_t p_in[const static 
             // We need to read the next codepoint
             if (pos_in >= sz_in)
             {
-                ret = CUTF_SUCCESS;
                 break;
             }
             auto const c = p_in[pos_in];
@@ -324,7 +322,10 @@ cutf_result_t cutf_s32tos8(const size_t sz_in, const char32_t p_in[const static 
     *p_consumed = pos_in;
     *p_written = pos_out;
 
-    return ret;
+    if (pos_in != sz_in)
+        return CUTF_INSUFFICIENT_BUFFER;
+
+    return CUTF_SUCCESS;
 }
 
 size_t cutf_count_s8asc32_complete(const size_t sz_in, const char8_t p_in[const static sz_in])
@@ -541,7 +542,7 @@ cutf_result_t cutf_s16tos32(const size_t sz_in, const char16_t p_in[const static
     *p_written = pos_out;
 
     // Check if we ran out of output buffer before the end of the input
-    if (pos_out == sz_out)
+    if (pos_in != sz_in)
         return CUTF_INSUFFICIENT_BUFFER;
 
     // Nope, we finished it all!
@@ -628,7 +629,7 @@ cutf_result_t cutf_s32tos16(const size_t sz_in, const char32_t p_in[const static
     *p_written = pos_out;
 
     // Check if we ran out of output buffer before the end of the input
-    if (pos_out == sz_out)
+    if (pos_in != sz_in)
         return CUTF_INSUFFICIENT_BUFFER;
 
     // Nope, we finished it all!
@@ -725,4 +726,122 @@ void cutf_utf32_swap_endianness(const size_t sz_out, char32_t p_out[const sz_out
         swap_endian_32_t const swapped = {.b1 = in.b4, .b2 = in.b3, .b3 = in.b2, .b4 = in.b1};
         p_out[i] = swapped.c32;
     }
+}
+
+cutf_result_t cutf_s8tos16(const size_t sz_in, const char8_t p_in[const static sz_in], const size_t sz_out,
+                           size_t *const p_consumed, char16_t p_out[const sz_out], size_t *const p_written,
+                           cutf_state_t *const state)
+{
+    size_t pos_out = 0, pos_in, consumed, written;
+    // There are two options:
+    // 1. We are in the middle of writing out the UTF-16 output
+    // 2. We are in the middle of reading the UTF-8 input
+    if (state->state_type == CUTF_STATE_U16_1)
+    {
+        // We are in the middle of writing out
+        auto const res = update_utf16_state_removing(*state, 0);
+        if (res.state.state_type == CUTF_STATE_ERROR)
+        {
+            return CUTF_INVALID_INPUT;
+        }
+        // Update state
+        *state = res.state;
+        // Write output
+        p_out[0] = res.out;
+        pos_out = 1;
+    }
+
+    cutf_result_t res = CUTF_SUCCESS;
+    for (pos_in = 0; pos_in < sz_in && pos_out < sz_out; pos_in += consumed, pos_out += written)
+    {
+        // Consume UTF-8 character
+        char32_t next_codepoint;
+        res = cutf_c8toc32(sz_in - pos_in, p_in + pos_in, &consumed, &next_codepoint, state);
+        if (res == CUTF_INCOMPLETE_INPUT)
+        {
+            pos_in += consumed;
+            break;
+        }
+
+        if (res != CUTF_SUCCESS)
+        {
+            return res;
+        }
+
+        // Write the output as UTF-16
+        size_t unused;
+        res = cutf_s32tos16(1, &next_codepoint, sz_out - pos_out, &unused, p_out + pos_out, &written, state);
+        if (res == CUTF_INSUFFICIENT_BUFFER)
+        {
+            pos_out += written;
+            break;
+        }
+
+        if (res != CUTF_SUCCESS)
+        {
+            return res;
+        }
+    }
+
+    *p_consumed = pos_in;
+    *p_written = pos_out;
+    return res;
+}
+
+cutf_result_t cutf_s16tos8(const size_t sz_in, const char16_t p_in[const static sz_in], const size_t sz_out,
+                           size_t *const p_consumed, char8_t p_out[const sz_out], size_t *const p_written,
+                           cutf_state_t *const state)
+{
+    size_t pos_out = 0, pos_in, consumed, written;
+    while (pos_out < sz_out && (state->state_type == CUTF_STATE_U8_1 || state->state_type == CUTF_STATE_U8_2 ||
+                                state->state_type == CUTF_STATE_U8_3))
+    {
+        // We are in the middle of writing out
+        auto const res = update_utf8_state_removing(*state, 0);
+        if (res.state.state_type == CUTF_STATE_ERROR)
+        {
+            return CUTF_INVALID_INPUT;
+        }
+        // Update state
+        *state = res.state;
+        // Write output
+        p_out[pos_out] = res.out;
+        pos_out += 1;
+    }
+
+    cutf_result_t res = CUTF_SUCCESS;
+    for (pos_in = 0; pos_in < sz_in && pos_out < sz_out; pos_in += consumed, pos_out += written)
+    {
+        // Consume UTF-16 characters and decode into UTF-32
+        char32_t next_codepoint;
+        res = cutf_c16toc32(sz_in - pos_in, p_in + pos_in, &consumed, &next_codepoint, state);
+        if (res == CUTF_INCOMPLETE_INPUT)
+        {
+            pos_in += consumed;
+            break;
+        }
+
+        if (res != CUTF_SUCCESS)
+        {
+            return res;
+        }
+
+        // Write the output as UTF-8
+        size_t unused;
+        res = cutf_s32tos8(1, &next_codepoint, sz_out - pos_out, &unused, p_out + pos_out, &written, state);
+        if (res == CUTF_INSUFFICIENT_BUFFER)
+        {
+            pos_out += written;
+            break;
+        }
+
+        if (res != CUTF_SUCCESS)
+        {
+            return res;
+        }
+    }
+
+    *p_consumed = pos_in;
+    *p_written = pos_out;
+    return res;
 }

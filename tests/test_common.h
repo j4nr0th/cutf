@@ -1,7 +1,16 @@
 #pragma once
 #include <stdio.h>
 #include <stdlib.h>
-#define TEST_ASSERT(x) ((x) ? (void)0 : (fprintf(stderr, "Assertion failed: %s\n", #x), exit(EXIT_FAILURE)))
+
+#if defined(__GNUC__) && !defined(__clang__)
+#define DBG_BREAK __builtin_trap()
+#endif
+
+#ifndef DBG_BREAK
+#define DBG_BREAK ((void)0)
+#endif
+
+#define TEST_ASSERT(x) ((x) ? (void)0 : (fprintf(stderr, "Assertion failed: %s\n", #x), DBG_BREAK, exit(EXIT_FAILURE)))
 
 typedef struct
 {

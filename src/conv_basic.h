@@ -31,6 +31,10 @@ struct cutf_state_t
 };
 typedef struct cutf_state_t cutf_state_t;
 
+bool cutf_state_is_clean(cutf_state_t state);
+
+static const cutf_state_t CUTF_STATE_INITIALIZER = {.state_type = CUTF_STATE_CLEAR};
+
 /**
  * Extract the first Unicode point from a UTF-8 string.
  *
@@ -206,3 +210,33 @@ utf_endianness_t cutf_utf32_bom_endianness(char32_t bom);
  * @param p_in Input UTF-32 string.
  */
 void cutf_utf32_swap_endianness(size_t sz_out, char32_t p_out[sz_out], const char32_t p_in[static sz_out]);
+
+/**
+ * Convert a UTF-8 string to a UTF-16 string.
+ *
+ * @param sz_in Number of characters in the input.
+ * @param p_in Input UTF-8 string to convert.
+ * @param sz_out Size of the output string.
+ * @param p_consumed Pointer which receives the number of UTF-8 units consumed.
+ * @param p_out Pointer to the output array.
+ * @param p_written Pointer which receives the number of UTF-16 units written.
+ * @param state Pointer to the conversion state.
+ * @return CUTF_SUCCESS if successful, otherwise an error code.
+ */
+cutf_result_t cutf_s8tos16(size_t sz_in, const char8_t p_in[static sz_in], size_t sz_out, size_t *p_consumed,
+                           char16_t p_out[sz_out], size_t *p_written, cutf_state_t *state);
+
+/**
+ * Convert a UTF-16 string to a UTF-8 string.
+ *
+ * @param sz_in Number of characters in the input.
+ * @param p_in Input UTF-16 string to convert.
+ * @param sz_out Size of the output string.
+ * @param p_consumed Pointer which receives the number of UTF-16 units consumed.
+ * @param p_out Pointer to the output array.
+ * @param p_written Pointer which receives the number of UTF-8 units written.
+ * @param state Pointer to the conversion state.
+ * @return CUTF_SUCCESS if successful, otherwise an error code.
+ */
+cutf_result_t cutf_s16tos8(size_t sz_in, const char16_t p_in[static sz_in], size_t sz_out, size_t *p_consumed,
+                           char8_t p_out[sz_out], size_t *p_written, cutf_state_t *state);
