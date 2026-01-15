@@ -1,8 +1,12 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <uchar.h>
+
+#include <stddef.h>
+// Include for bool if we are not on C23
+#if __STDC_VERSION__ < 202311L
+#    include <stdbool.h>
+#endif
 
 enum cutf_result_t
 {

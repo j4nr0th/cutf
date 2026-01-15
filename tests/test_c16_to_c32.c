@@ -1,5 +1,3 @@
-#include "../src/conv_basic.h"
-
 #include "test_common.h"
 #include <string.h>
 

@@ -4,10 +4,11 @@ project(cutf C)
 set(CMAKE_C_STANDARD 23)
 
 set(CUTF_SOURCE_FILES
-    src/conv_basic.c
+        src/cutf.c
 )
 
 add_library(cutf STATIC ${CUTF_SOURCE_FILES})
+target_include_directories(cutf INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include/)
 
 if (CMAKE_COMPILER_ID STREQUAL "GNU")
     target_compile_options(cutf PRIVATE -Wall -Wextra -fanalyzer -fpipe)

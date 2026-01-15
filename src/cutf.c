@@ -1,6 +1,7 @@
-#include "conv_basic.h"
+#include "../include/cutf.h"
 
 #include <assert.h>
+#include <stdint.h>
 
 typedef enum
 {
