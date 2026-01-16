@@ -35,7 +35,7 @@ int main(void)
         cutf_result_t res = ~0; // Garbage
         for (unsigned p_in = 0, p_out = 0; p_out < test_pairs[i].sz16;)
         {
-            res = cutf_s8tos16(1, test_pairs[i].p8 + p_in, 1, &consumed, out + p_out, &written, &ctx);
+            res = cutf_s8tos16(1, test_pairs[i].p8 + p_in, sizeof(out) - p_out, &consumed, out + p_out, &written, &ctx);
             TEST_ASSERT(res == CUTF_SUCCESS || res == CUTF_INCOMPLETE_INPUT);
             TEST_ASSERT(consumed == 1 || written == 1);
             p_out += written;

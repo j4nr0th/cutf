@@ -40,19 +40,6 @@ bool cutf_state_is_clean(cutf_state_t state);
 static const cutf_state_t CUTF_STATE_INITIALIZER = {.state_type = CUTF_STATE_CLEAR};
 
 /**
- * Extract the first Unicode point from a UTF-8 string.
- *
- * @param sz_in Maximum number of UTF-8 units that can be read.
- * @param p_in Input UTF-8 string.
- * @param p_consumed Pointer which receives the number of UTF-8 units converted.
- * @param p_out Pointer which receives the first Unicode codepoint as UTF-32.
- * @param state Pointer to the conversion state.
- * @return CUTF_SUCCESS if successful, otherwise an error code.
- */
-cutf_result_t cutf_c8toc32(size_t sz_in, const char8_t p_in[static sz_in], size_t *p_consumed, char32_t *p_out,
-                           cutf_state_t *state);
-
-/**
  * Convert a UTF-8 string to a UTF-32 string.
  *
  * @param sz_in Number of UTF-8 units to convert.
@@ -110,7 +97,7 @@ cutf_result_t cutf_is_utf8_valid(size_t sz_in, const char8_t p_in[static sz_in],
  * @param p_consumed Pointer which receives the number of UTF-8 units to advance to the next Unicode unit.
  * @return CUTF_SUCCESS if successful, otherwise an error code.
  */
-cutf_result_t cutf_c8_next_unicode(size_t sz_in, const char8_t p_in[const static sz_in], size_t *p_consumed);
+cutf_result_t cutf_utf8_next_codepoint(size_t sz_in, const char8_t p_in[const static sz_in], size_t *p_consumed);
 
 /**
  * Count the number of UTF-32 characters required to represent all characters in the input.
@@ -122,19 +109,6 @@ cutf_result_t cutf_c8_next_unicode(size_t sz_in, const char8_t p_in[const static
  * @return CUTF_SUCCESS on success, otherwise an error code.
  */
 cutf_result_t cutf_count_s8asc32(size_t sz_in, const char8_t p_in[static sz_in], size_t *valid_count, size_t *p_count);
-
-/**
- * Extract the first Unicode point from a UTF-16 string.
- *
- * @param sz_in Maximum number of UTF-16 units that can be read.
- * @param p_in Input UTF-16 string.
- * @param p_consumed Pointer which receives the number of UTF-16 units converted.
- * @param p_out Pointer which receives the first Unicode codepoint as UTF-32.
- * @param state Pointer to the conversion state.
- * @return CUTF_SUCCESS if successful, otherwise an error code.
- */
-cutf_result_t cutf_c16toc32(size_t sz_in, const char16_t p_in[static sz_in], size_t *p_consumed, char32_t *p_out,
-                            cutf_state_t *state);
 
 /**
  * Convert a UTF-16 string to a UTF-32 string.

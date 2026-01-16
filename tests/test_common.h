@@ -32,7 +32,9 @@ typedef struct
     }
 
 static constexpr test_pair_t test_pairs[] = {
-    ADD_TEST_PAIR(hello),        ADD_TEST_PAIR(world),  ADD_TEST_PAIR(ケツを食べる),
-    ADD_TEST_PAIR(uoooh 😭😭😭), ADD_TEST_PAIR(🇧🇷🇧🇷🇧🇷), ADD_TEST_PAIR(モビンの時間だ),
+    ADD_TEST_PAIR(hello),        ADD_TEST_PAIR(world),
+    ADD_TEST_PAIR(ケツを食べる), ADD_TEST_PAIR(🗿💢🔥😭😂👋🏻✋ 🏻👩🏿‍❤ ️‍👨🏻),
+    ADD_TEST_PAIR(🇧🇷🇧🇷🇧🇷),       ADD_TEST_PAIR(モビンの時間だ),
+    ADD_TEST_PAIR(amogus ඞ),
 };
 static constexpr size_t num_test_pairs = sizeof(test_pairs) / sizeof(test_pair_t);
