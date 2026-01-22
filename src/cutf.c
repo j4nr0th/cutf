@@ -1040,6 +1040,7 @@ static constexpr char32_t CUTF_MAY_BREAK[] = {
     U'\x0020', // Space
     U'\x0085', // Next line
     U'\x1689', // Ogham space mark
+    U'\x180E', // Mongolian vowel separator
     U'\x2000', // En quad
     U'\x2001', // Em quad
     U'\x2002', // En space
@@ -1050,6 +1051,9 @@ static constexpr char32_t CUTF_MAY_BREAK[] = {
     U'\x2008', // Punctuation space
     U'\x2009', // Thin space
     U'\x200A', // Hair space
+    U'\x200B', // Zero width space
+    U'\x200C', // Zero width non-joiner
+    U'\x200D', // Zero width joiner
     U'\x2028', // Line separator
     U'\x2029', // Paragraph separator
     U'\x205F', // Medium mathematical space
