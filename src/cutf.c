@@ -1000,9 +1000,6 @@ bool cutf_is_whitespace(const char32_t c)
         auto const whitespace_char = CUTF_WHITESPACE_CHARACTERS[i];
         if (c == whitespace_char)
             return true;
-        // The whitespace characters are sorted, so "c" is higher, there's no chance it is whitespace.
-        if (c > whitespace_char)
-            return false;
     }
     return false;
 }
@@ -1024,9 +1021,6 @@ bool cutf_is_line_terminator(const char32_t c)
         auto const line_terminator = CUTF_LINE_TERMINATORS[i];
         if (c == line_terminator)
             return true;
-        // The line terminators are sorted, so "c" is higher, there's no chance it is whitespace.
-        if (c > line_terminator)
-            return false;
     }
     return false;
 }
@@ -1069,9 +1063,6 @@ bool cutf_is_allowed_to_break(const char32_t c)
         auto const break_char = CUTF_MAY_BREAK[i];
         if (c == break_char)
             return true;
-        // The break characters are sorted, so "c" is higher, there's no chance it is whitespace.
-        if (c > break_char)
-            return false;
     }
     return false;
 }
