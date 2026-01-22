@@ -3,6 +3,12 @@
 #include <assert.h>
 #include <stdint.h>
 
+typedef struct
+{
+    cutf_state_t state;
+    size_t consumed;
+} codepoint_return_t;
+
 typedef enum
 {
     UNICODE_MAX_VALUE = 0x10FFFF,   // highest unicode value
@@ -135,44 +141,54 @@ static cutf_state_t update_utf8_state_adding(const char8_t c, const cutf_state_t
     return (cutf_state_t){.state_type = new_type, .value = (state.value << 6) | (c & MASK_BOTTOM_6_BITS)};
 }
 
-cutf_result_t cutf_s8tos32(const size_t sz_in, const char8_t p_in[const static sz_in], const size_t sz_out,
-                           size_t *const p_consumed, char32_t p_out[const sz_out], size_t *const p_written,
-                           cutf_state_t *const state)
+typedef enum
 {
-    size_t pos_in, pos_out;
-    for (pos_in = 0, pos_out = 0; pos_in < sz_in && pos_out < sz_out; ++pos_in)
+    UTF16_SURROGATE_HIGH_START = 0xD800,
+    UTF16_SURROGATE_LOW_START = 0xDC00,
+    UTF16_SURROGATE_PAIR_START = 0x10000,
+    UTF16_SURROGATE_HIGH_END = 0xDBFF,
+    UTF16_SURROGATE_LOW_END = 0xDFFF
+} utf16_constants_t;
+
+static cutf_state_t utf16_extract_leading_unit(const char16_t c)
+{
+    // Is just a single unit?
+    if (c < UTF16_SURROGATE_HIGH_START || c > UTF16_SURROGATE_LOW_END)
     {
-        auto const c = p_in[pos_in];
-
-        // Update the state type
-        auto const new_state = update_utf8_state_adding(c, *state);
-        if (new_state.state_type == CUTF_STATE_ERROR)
-            return CUTF_INVALID_INPUT;
-
-        // Update the value accumulated thus far
-        *state = new_state;
-        if (new_state.state_type == CUTF_STATE_CLEAR)
-        {
-            // We are done with parsing
-            p_out[pos_out] = new_state.value;
-            // Clear the context value as well
-            state->value = 0;
-            pos_out += 1;
-        }
+        // Nothing more to do
+        return (cutf_state_t){.state_type = CUTF_STATE_CLEAR, .value = c};
     }
-    *p_consumed = pos_in;
-    *p_written = pos_out;
+    // Is it the high surrogate (since it comes first)?
+    if (c < UTF16_SURROGATE_HIGH_END && c >= UTF16_SURROGATE_HIGH_START)
+    {
+        return (cutf_state_t){.state_type = CUTF_STATE_U16_1, .value = MASK_BOTTOM_10_BITS & c};
+    }
 
-    // Was the input complete?
-    if (state->state_type != CUTF_STATE_CLEAR)
-        return CUTF_INCOMPLETE_INPUT;
+    // We either got the low surrogate or a value that's out of bounds either way.
+    return (cutf_state_t){.state_type = CUTF_STATE_ERROR};
+}
 
-    // Check if we ran out of output buffer before the end of the input
-    if (pos_in != sz_in && pos_out == sz_out)
-        return CUTF_INSUFFICIENT_BUFFER;
+static cutf_state_t update_utf16_state_adding(const char16_t c, const cutf_state_t state)
+{
+    assert(state.state_type == CUTF_STATE_CLEAR || state.state_type == CUTF_STATE_U16_1);
 
-    // Nope, we finished it all!
-    return CUTF_SUCCESS;
+    if (state.state_type == CUTF_STATE_CLEAR)
+    {
+        // We have a new one to deal with
+        return utf16_extract_leading_unit(c);
+    }
+
+    // Check that this is indeed a low surrogate unit
+    if (c > UTF16_SURROGATE_LOW_END || c < UTF16_SURROGATE_LOW_START)
+        return (cutf_state_t){.state_type = CUTF_STATE_ERROR};
+
+    if (state.state_type != CUTF_STATE_U16_1)
+    {
+        return (cutf_state_t){.state_type = CUTF_STATE_ERROR};
+    }
+
+    return (cutf_state_t){.state_type = CUTF_STATE_CLEAR,
+                          .value = UTF16_SURROGATE_PAIR_START + (state.value << 10) + (MASK_BOTTOM_10_BITS & c)};
 }
 
 typedef struct
@@ -262,6 +278,184 @@ static remove_result_utf8_t update_utf8_state_removing(const cutf_state_t state,
     }
 
     return (remove_result_utf8_t){.state = {.state_type = new_type, .value = v}, .out = out};
+}
+
+typedef struct
+{
+    cutf_state_t state;
+    char16_t out;
+} remove_result_utf16_t;
+
+static remove_result_utf16_t update_utf16_state_removing(const cutf_state_t state, const char32_t c)
+{
+    assert(state.state_type == CUTF_STATE_CLEAR || state.state_type == CUTF_STATE_U16_1);
+
+    if (state.state_type == CUTF_STATE_CLEAR)
+    {
+        // Initialize the state
+        // Check for valid Unicode codepoint
+        if (!is_valid_unicode_codepoint(c))
+            return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_ERROR}};
+
+        // Does it fit in the single unit?
+        if (c < UTF16_SURROGATE_PAIR_START)
+            return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_CLEAR}, .out = (char16_t)c};
+
+        // Return the high part and keep the low part in the state for later
+        auto const adjusted = c - UTF16_SURROGATE_PAIR_START;
+        auto const low_part = (char16_t)(adjusted & MASK_BOTTOM_10_BITS);
+        return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_U16_1, .value = low_part},
+                                       .out = UTF16_SURROGATE_HIGH_START | (adjusted >> 10)};
+    }
+
+    // The current state is not clean, which means we return the 10 bits that are left.
+    // This also means we do not need "c"
+
+    if (state.state_type != CUTF_STATE_U16_1)
+    {
+        return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_ERROR}};
+    }
+
+    auto const out = UTF16_SURROGATE_LOW_START | state.value;
+    return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_CLEAR}, .out = out};
+}
+
+static codepoint_return_t utf8_read_in_codepoint(const size_t sz_in, const char8_t p_in[static sz_in],
+                                                 cutf_state_t state)
+{
+    size_t i = 0;
+    while (i < sz_in)
+    {
+        auto const c = p_in[i];
+        i += 1;
+
+        // Update the state type
+        auto const new_state = update_utf8_state_adding(c, state);
+        if (new_state.state_type == CUTF_STATE_ERROR)
+        {
+            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
+        }
+
+        // Update the value accumulated thus far
+        state = new_state;
+        if (state.state_type == CUTF_STATE_CLEAR)
+            break;
+    }
+
+    return (codepoint_return_t){.state = state, .consumed = i};
+}
+
+static codepoint_return_t utf16_read_in_codepoint(const size_t sz_in, const char16_t p_in[static sz_in],
+                                                  cutf_state_t state)
+{
+    size_t i = 0;
+    while (i < sz_in)
+    {
+        auto const c = p_in[i];
+        i += 1;
+
+        // Update the state type
+        auto const new_state = update_utf16_state_adding(c, state);
+        if (new_state.state_type == CUTF_STATE_ERROR)
+        {
+            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
+        }
+
+        // Update the value accumulated thus far
+        state = new_state;
+        if (state.state_type == CUTF_STATE_CLEAR)
+            break;
+    }
+
+    return (codepoint_return_t){.state = state, .consumed = i};
+}
+
+static codepoint_return_t utf16_write_out_codepoint(const size_t sz_out, char16_t p_out[const sz_out],
+                                                    cutf_state_t state, const char32_t next_codepoint)
+{
+    size_t i = 0;
+    while (i < sz_out)
+    {
+        // We do not need to read any more characters at the moment
+        auto const write_res = update_utf16_state_removing(state, next_codepoint);
+        if (write_res.state.state_type == CUTF_STATE_ERROR)
+        {
+            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
+        }
+        p_out[i] = write_res.out;
+        i += 1;
+        state = write_res.state;
+
+        if (state.state_type == CUTF_STATE_CLEAR)
+            break;
+    }
+
+    return (codepoint_return_t){.state = state, .consumed = i};
+}
+
+static codepoint_return_t utf8_write_out_codepoint(const size_t sz_out, char8_t p_out[const sz_out], cutf_state_t state,
+                                                   const char32_t next_codepoint)
+{
+    size_t i = 0;
+    while (i < sz_out)
+    {
+        // We do not need to read any more characters at the moment
+        auto const write_res = update_utf8_state_removing(state, next_codepoint);
+        if (write_res.state.state_type == CUTF_STATE_ERROR)
+        {
+            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
+        }
+        p_out[i] = write_res.out;
+        i += 1;
+        state = write_res.state;
+
+        if (state.state_type == CUTF_STATE_CLEAR)
+            break;
+    }
+
+    return (codepoint_return_t){.state = state, .consumed = i};
+}
+
+cutf_result_t cutf_s8tos32(const size_t sz_in, const char8_t p_in[const static sz_in], const size_t sz_out,
+                           size_t *const p_consumed, char32_t p_out[const sz_out], size_t *const p_written,
+                           cutf_state_t *const state)
+{
+    size_t pos_in, pos_out;
+    for (pos_in = 0, pos_out = 0; pos_in < sz_in && pos_out < sz_out;)
+    {
+        auto const res = utf8_read_in_codepoint(sz_in - pos_in, p_in + pos_in, *state);
+        if (res.state.state_type == CUTF_STATE_ERROR)
+            return CUTF_INVALID_INPUT;
+        pos_in += res.consumed;
+
+        // Update the value accumulated thus far
+        if (res.state.state_type == CUTF_STATE_CLEAR)
+        {
+            // We are done with parsing
+            p_out[pos_out] = res.state.value;
+            // Clear the context value as well
+            state->value = 0;
+            pos_out += 1;
+        }
+        else
+        {
+            *state = res.state;
+            break;
+        }
+    }
+    *p_consumed = pos_in;
+    *p_written = pos_out;
+
+    // Was the input complete?
+    if (state->state_type != CUTF_STATE_CLEAR)
+        return CUTF_INCOMPLETE_INPUT;
+
+    // Check if we ran out of output buffer before the end of the input
+    if (pos_in != sz_in && pos_out == sz_out)
+        return CUTF_INSUFFICIENT_BUFFER;
+
+    // Nope, we finished it all!
+    return CUTF_SUCCESS;
 }
 
 cutf_result_t cutf_s32tos8(const size_t sz_in, const char32_t p_in[const static sz_in], const size_t sz_out,
@@ -421,56 +615,6 @@ cutf_result_t cutf_count_s8asc32(const size_t sz_in, const char8_t p_in[const st
     return res;
 }
 
-typedef enum
-{
-    UTF16_SURROGATE_HIGH_START = 0xD800,
-    UTF16_SURROGATE_LOW_START = 0xDC00,
-    UTF16_SURROGATE_PAIR_START = 0x10000,
-    UTF16_SURROGATE_HIGH_END = 0xDBFF,
-    UTF16_SURROGATE_LOW_END = 0xDFFF
-} utf16_constants_t;
-
-static cutf_state_t utf16_extract_leading_unit(const char16_t c)
-{
-    // Is just a single unit?
-    if (c < UTF16_SURROGATE_HIGH_START || c > UTF16_SURROGATE_LOW_END)
-    {
-        // Nothing more to do
-        return (cutf_state_t){.state_type = CUTF_STATE_CLEAR, .value = c};
-    }
-    // Is it the high surrogate (since it comes first)?
-    if (c < UTF16_SURROGATE_HIGH_END && c >= UTF16_SURROGATE_HIGH_START)
-    {
-        return (cutf_state_t){.state_type = CUTF_STATE_U16_1, .value = MASK_BOTTOM_10_BITS & c};
-    }
-
-    // We either got the low surrogate or a value that's out of bounds either way.
-    return (cutf_state_t){.state_type = CUTF_STATE_ERROR};
-}
-
-static cutf_state_t update_utf16_state_adding(const char16_t c, const cutf_state_t state)
-{
-    assert(state.state_type == CUTF_STATE_CLEAR || state.state_type == CUTF_STATE_U16_1);
-
-    if (state.state_type == CUTF_STATE_CLEAR)
-    {
-        // We have a new one to deal with
-        return utf16_extract_leading_unit(c);
-    }
-
-    // Check that this is indeed a low surrogate unit
-    if (c > UTF16_SURROGATE_LOW_END || c < UTF16_SURROGATE_LOW_START)
-        return (cutf_state_t){.state_type = CUTF_STATE_ERROR};
-
-    if (state.state_type != CUTF_STATE_U16_1)
-    {
-        return (cutf_state_t){.state_type = CUTF_STATE_ERROR};
-    }
-
-    return (cutf_state_t){.state_type = CUTF_STATE_CLEAR,
-                          .value = UTF16_SURROGATE_PAIR_START + (state.value << 10) + (MASK_BOTTOM_10_BITS & c)};
-}
-
 cutf_result_t cutf_c16toc32(const size_t sz_in, const char16_t p_in[const static sz_in], size_t *const p_consumed,
                             char32_t *const p_out, cutf_state_t *const state)
 {
@@ -529,46 +673,6 @@ cutf_result_t cutf_s16tos32(const size_t sz_in, const char16_t p_in[const static
 
     // Nope, we finished it all!
     return CUTF_SUCCESS;
-}
-
-typedef struct
-{
-    cutf_state_t state;
-    char16_t out;
-} remove_result_utf16_t;
-
-static remove_result_utf16_t update_utf16_state_removing(const cutf_state_t state, const char32_t c)
-{
-    assert(state.state_type == CUTF_STATE_CLEAR || state.state_type == CUTF_STATE_U16_1);
-
-    if (state.state_type == CUTF_STATE_CLEAR)
-    {
-        // Initialize the state
-        // Check for valid Unicode codepoint
-        if (!is_valid_unicode_codepoint(c))
-            return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_ERROR}};
-
-        // Does it fit in the single unit?
-        if (c < UTF16_SURROGATE_PAIR_START)
-            return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_CLEAR}, .out = (char16_t)c};
-
-        // Return the high part and keep the low part in the state for later
-        auto const adjusted = c - UTF16_SURROGATE_PAIR_START;
-        auto const low_part = (char16_t)(adjusted & MASK_BOTTOM_10_BITS);
-        return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_U16_1, .value = low_part},
-                                       .out = UTF16_SURROGATE_HIGH_START | (adjusted >> 10)};
-    }
-
-    // The current state is not clean, which means we return the 10 bits that are left.
-    // This also means we do not need "c"
-
-    if (state.state_type != CUTF_STATE_U16_1)
-    {
-        return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_ERROR}};
-    }
-
-    auto const out = UTF16_SURROGATE_LOW_START | state.value;
-    return (remove_result_utf16_t){.state = {.state_type = CUTF_STATE_CLEAR}, .out = out};
 }
 
 cutf_result_t cutf_s32tos16(const size_t sz_in, const char32_t p_in[const static sz_in], const size_t sz_out,
@@ -708,108 +812,6 @@ void cutf_utf32_swap_endianness(const size_t sz_out, char32_t p_out[const sz_out
         swap_endian_32_t const swapped = {.b1 = in.b4, .b2 = in.b3, .b3 = in.b2, .b4 = in.b1};
         p_out[i] = swapped.c32;
     }
-}
-
-typedef struct
-{
-    cutf_state_t state;
-    size_t consumed;
-} codepoint_return_t;
-
-static codepoint_return_t utf8_read_in_codepoint(const size_t sz_in, const char8_t p_in[static sz_in],
-                                                 cutf_state_t state)
-{
-    size_t i = 0;
-    while (i < sz_in)
-    {
-        auto const c = p_in[i];
-        i += 1;
-
-        // Update the state type
-        auto const new_state = update_utf8_state_adding(c, state);
-        if (new_state.state_type == CUTF_STATE_ERROR)
-        {
-            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
-        }
-
-        // Update the value accumulated thus far
-        state = new_state;
-        if (state.state_type == CUTF_STATE_CLEAR)
-            break;
-    }
-
-    return (codepoint_return_t){.state = state, .consumed = i};
-}
-
-static codepoint_return_t utf16_read_in_codepoint(const size_t sz_in, const char16_t p_in[static sz_in],
-                                                  cutf_state_t state)
-{
-    size_t i = 0;
-    while (i < sz_in)
-    {
-        auto const c = p_in[i];
-        i += 1;
-
-        // Update the state type
-        auto const new_state = update_utf16_state_adding(c, state);
-        if (new_state.state_type == CUTF_STATE_ERROR)
-        {
-            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
-        }
-
-        // Update the value accumulated thus far
-        state = new_state;
-        if (state.state_type == CUTF_STATE_CLEAR)
-            break;
-    }
-
-    return (codepoint_return_t){.state = state, .consumed = i};
-}
-
-static codepoint_return_t utf16_write_out_codepoint(const size_t sz_out, char16_t p_out[const sz_out],
-                                                    cutf_state_t state, const char32_t next_codepoint)
-{
-    size_t i = 0;
-    while (i < sz_out)
-    {
-        // We do not need to read any more characters at the moment
-        auto const write_res = update_utf16_state_removing(state, next_codepoint);
-        if (write_res.state.state_type == CUTF_STATE_ERROR)
-        {
-            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
-        }
-        p_out[i] = write_res.out;
-        i += 1;
-        state = write_res.state;
-
-        if (state.state_type == CUTF_STATE_CLEAR)
-            break;
-    }
-
-    return (codepoint_return_t){.state = state, .consumed = i};
-}
-
-static codepoint_return_t utf8_write_out_codepoint(const size_t sz_out, char8_t p_out[const sz_out], cutf_state_t state,
-                                                   const char32_t next_codepoint)
-{
-    size_t i = 0;
-    while (i < sz_out)
-    {
-        // We do not need to read any more characters at the moment
-        auto const write_res = update_utf8_state_removing(state, next_codepoint);
-        if (write_res.state.state_type == CUTF_STATE_ERROR)
-        {
-            return (codepoint_return_t){.state = {.state_type = CUTF_STATE_ERROR}};
-        }
-        p_out[i] = write_res.out;
-        i += 1;
-        state = write_res.state;
-
-        if (state.state_type == CUTF_STATE_CLEAR)
-            break;
-    }
-
-    return (codepoint_return_t){.state = state, .consumed = i};
 }
 
 cutf_result_t cutf_s8tos16(const size_t sz_in, const char8_t p_in[const static sz_in], const size_t sz_out,
