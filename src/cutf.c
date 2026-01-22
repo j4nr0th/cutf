@@ -962,3 +962,112 @@ cutf_result_t cutf_s16tos8(const size_t sz_in, const char16_t p_in[const static 
 
     return CUTF_SUCCESS;
 }
+
+static constexpr char32_t CUTF_WHITESPACE_CHARACTERS[] = {
+    U'\x0009', // Tab
+    U'\x000A', // Line feed
+    U'\x000B', // Line tab
+    U'\x000C', // Form feed
+    U'\x000D', // Carriage return
+    U'\x0020', // Space
+    U'\x0085', // Next line
+    U'\x00A0', // No-break space
+    U'\x1689', // Ogham space mark
+    U'\x2000', // En quad
+    U'\x2001', // Em quad
+    U'\x2002', // En space
+    U'\x2003', // Em space
+    U'\x2004', // Three-per-em space
+    U'\x2005', // Four-per-em space
+    U'\x2006', // Six-per-em space
+    U'\x2007', // Figure space
+    U'\x2008', // Punctuation space
+    U'\x2009', // Thin space
+    U'\x200A', // Hair space
+    U'\x2028', // Line separator
+    U'\x2029', // Paragraph separator
+    U'\x202F', // Narrow no-break space
+    U'\x205F', // Medium mathematical space
+    U'\x3000', // Ideographic
+};
+
+static constexpr size_t CUTF_WHITESPACE_CHARACTERS_COUNT = sizeof(CUTF_WHITESPACE_CHARACTERS) / sizeof(char32_t);
+
+bool cutf_is_whitespace(const char32_t c)
+{
+    for (size_t i = 0; i < CUTF_WHITESPACE_CHARACTERS_COUNT; ++i)
+    {
+        auto const whitespace_char = CUTF_WHITESPACE_CHARACTERS[i];
+        if (c == whitespace_char)
+            return true;
+        // The whitespace characters are sorted, so "c" is higher, there's no chance it is whitespace.
+        if (c > whitespace_char)
+            return false;
+    }
+    return false;
+}
+
+static constexpr char32_t CUTF_LINE_TERMINATORS[] = {
+    U'\x000A', // Line feed
+    U'\x000D', // Carriage return
+    U'\x0085', // Next line
+    U'\x2028', // Line separator
+    U'\x2029', // Paragraph separator
+};
+
+static constexpr size_t CUTF_LINE_TERMINATORS_COUNT = sizeof(CUTF_LINE_TERMINATORS) / sizeof(char32_t);
+
+bool cutf_is_line_terminator(const char32_t c)
+{
+    for (size_t i = 0; i < CUTF_LINE_TERMINATORS_COUNT; ++i)
+    {
+        auto const line_terminator = CUTF_LINE_TERMINATORS[i];
+        if (c == line_terminator)
+            return true;
+        // The line terminators are sorted, so "c" is higher, there's no chance it is whitespace.
+        if (c > line_terminator)
+            return false;
+    }
+    return false;
+}
+
+static constexpr char32_t CUTF_MAY_BREAK[] = {
+    U'\x0009', // Tab
+    U'\x000A', // Line feed
+    U'\x000B', // Line tab
+    U'\x000C', // Form feed
+    U'\x000D', // Carriage return
+    U'\x0020', // Space
+    U'\x0085', // Next line
+    U'\x1689', // Ogham space mark
+    U'\x2000', // En quad
+    U'\x2001', // Em quad
+    U'\x2002', // En space
+    U'\x2003', // Em space
+    U'\x2004', // Three-per-em space
+    U'\x2005', // Four-per-em space
+    U'\x2006', // Six-per-em space
+    U'\x2008', // Punctuation space
+    U'\x2009', // Thin space
+    U'\x200A', // Hair space
+    U'\x2028', // Line separator
+    U'\x2029', // Paragraph separator
+    U'\x205F', // Medium mathematical space
+    U'\x3000', // Ideographic
+};
+
+static constexpr size_t CUTF_MAY_BREAK_COUNT = sizeof(CUTF_MAY_BREAK) / sizeof(char32_t);
+
+bool cutf_is_allowed_to_break(const char32_t c)
+{
+    for (size_t i = 0; i < CUTF_MAY_BREAK_COUNT; ++i)
+    {
+        auto const break_char = CUTF_MAY_BREAK[i];
+        if (c == break_char)
+            return true;
+        // The break characters are sorted, so "c" is higher, there's no chance it is whitespace.
+        if (c > break_char)
+            return false;
+    }
+    return false;
+}

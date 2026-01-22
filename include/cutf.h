@@ -218,3 +218,27 @@ cutf_result_t cutf_s8tos16(size_t sz_in, const char8_t p_in[static sz_in], size_
  */
 cutf_result_t cutf_s16tos8(size_t sz_in, const char16_t p_in[static sz_in], size_t sz_out, size_t *p_consumed,
                            char8_t p_out[sz_out], size_t *p_written, cutf_state_t *state);
+
+/**
+ * Check if the character is whitespace.
+ *
+ * @param c Character to check.
+ * @return Non-zero if the character is considered whitespace.
+ */
+bool cutf_is_whitespace(char32_t c);
+
+/**
+ * Check if the character is line-break.
+ *
+ * @param c Character to check.
+ * @return Non-zero if the character is considered a line-break.
+ */
+bool cutf_is_line_break(char32_t c);
+
+/**
+ * Check if the character can be used to break a line text and replace it with a new line.
+ *
+ * @param c Character to check.
+ * @return Non-zero if the character is allowed to break a line.
+ */
+bool cutf_is_allowed_to_break(char32_t c);
